@@ -1,0 +1,82 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<Document xmlns="urn:iso:std:iso:20022:tech:xsd:pain.002.001.03" xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance">
+	<CstmrPmtStsRpt>
+		<GrpHdr>
+			<MsgId>2AGOTFHY0XSN9L</MsgId>
+			<CreDtTm>2022-01-14T10:12:58</CreDtTm>
+			<InitgPty>
+				<Nm>Grupo Sion</Nm>
+				<PstlAdr>
+					<StrtNm></StrtNm>
+					<TwnNm></TwnNm>
+					<Ctry>GT</Ctry>
+				</PstlAdr>
+			</InitgPty>
+			<Id>
+				<OrgId>
+					<BICOrBEI>GRUPOSIONXX</BICOrBEI>
+				</OrgId>
+			</Id>
+			<CdtrAgt>
+				<FinInstnId>
+					<BICFI>AMCNGTGTXXX</BICFI>
+				</FinInstnId>
+			</CdtrAgt>
+		</GrpHdr>
+		<OrgnlGrpInfAndSts>
+			<OrgnlMsgId>2AGOTFHY0XSN9L</OrgnlMsgId>
+			<OrgnlMsgNmId>PAIN.001.001.03</OrgnlMsgNmId>
+			<OrgnlCreDtTm>2022-01-14T10:11:24</OrgnlCreDtTm>
+		</OrgnlGrpInfAndSts>
+		<OrgnlPmtInfAndSts>
+			<OrgnlPmtInfId>2AGOTFHY0XSN9L</OrgnlPmtInfId>
+			<TxInfAndSts>
+				<StsId>ACSP</StsId>
+				<OrgnlEndToEndId>10008239</OrgnlEndToEndId>
+				<TxSts>ACSP</TxSts>
+				<StsRsnInf>
+					<Orgtr>
+						<Id>
+							<OrgId>
+								<AnyBIC>AMCNGTGTXXX</AnyBIC>
+							</OrgId>
+						</Id>
+					</Orgtr>
+					<Rsn>
+						<Cd></Cd>
+					</Rsn>
+					<AddtlInf>L2-Trn. Procesada correctamente</AddtlInf>
+				</StsRsnInf>
+				<OrgnlTxRef>
+					<Amt>
+						<InstdAmt Ccy="QTZ">57201.63</InstdAmt>
+					</Amt>
+					<ReqdColltnDt>2022-01-14</ReqdColltnDt>
+					<MndtRltdInf>
+						<MndtId>AMCNGTGTXXX</MndtId>
+					</MndtRltdInf>
+					<Dbtr>
+						<Nm></Nm>
+						<PstlAdr>
+							<StrtNm></StrtNm>
+							<BldgNb></BldgNb>
+							<PstCd></PstCd>
+							<TwnNm></TwnNm>
+							<Ctry>GT</Ctry>
+						</PstlAdr>
+					</Dbtr>
+					<Cdtr>
+						<Nm>TOP GREEN, SOCIEDAD ANONIMA</Nm>
+						<PstlAdr>
+							<StrtNm></StrtNm>
+							<BldgNb></BldgNb>
+							<PstCd></PstCd>
+							<TwnNm></TwnNm>
+							<Ctry>GT</Ctry>
+						</PstlAdr>
+					</Cdtr>
+				</OrgnlTxRef>
+			</TxInfAndSts>
+		</OrgnlPmtInfAndSts>
+	</CstmrPmtStsRpt>
+</Document>

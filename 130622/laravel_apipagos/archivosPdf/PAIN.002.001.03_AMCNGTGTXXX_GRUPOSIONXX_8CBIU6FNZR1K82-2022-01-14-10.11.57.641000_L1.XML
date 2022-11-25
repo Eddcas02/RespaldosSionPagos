@@ -1,0 +1,82 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<Document xmlns="urn:iso:std:iso:20022:tech:xsd:pain.002.001.03" xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance">
+	<CstmrPmtStsRpt>
+		<GrpHdr>
+			<MsgId>8CBIU6FNZR1K82</MsgId>
+			<CreDtTm>2022-01-14T10:11:57</CreDtTm>
+			<InitgPty>
+				<Nm>Grupo Sion</Nm>
+				<PstlAdr>
+					<StrtNm>5A. AVE. SUR No. 30 Guatemala</StrtNm>
+					<TwnNm></TwnNm>
+					<Ctry>GT</Ctry>
+				</PstlAdr>
+			</InitgPty>
+			<Id>
+				<OrgId>
+					<BICOrBEI>GRUPOSIONXX</BICOrBEI>
+				</OrgId>
+			</Id>
+			<CdtrAgt>
+				<FinInstnId>
+					<BICFI>AMCNGTGTXXX</BICFI>
+				</FinInstnId>
+			</CdtrAgt>
+		</GrpHdr>
+		<OrgnlGrpInfAndSts>
+			<OrgnlMsgId>8CBIU6FNZR1K82</OrgnlMsgId>
+			<OrgnlMsgNmId>PAIN.001.001.03</OrgnlMsgNmId>
+			<OrgnlCreDtTm>2022-01-14T10:11:19</OrgnlCreDtTm>
+		</OrgnlGrpInfAndSts>
+		<OrgnlPmtInfAndSts>
+			<OrgnlPmtInfId>8CBIU6FNZR1K82</OrgnlPmtInfId>
+			<TxInfAndSts>
+				<StsId>RJCT</StsId>
+				<OrgnlEndToEndId>10008341</OrgnlEndToEndId>
+				<TxSts>RJCT</TxSts>
+				<StsRsnInf>
+					<Orgtr>
+						<Id>
+							<OrgId>
+								<AnyBIC>AMCNGTGTXXX</AnyBIC>
+							</OrgId>
+						</Id>
+					</Orgtr>
+					<Rsn>
+						<Cd></Cd>
+					</Rsn>
+					<AddtlInf>L1-NUMERO DE REFERENCIA NO TIENE CUENTAS CON EL PLAN</AddtlInf>
+				</StsRsnInf>
+				<OrgnlTxRef>
+					<Amt>
+						<InstdAmt Ccy="QTZ">5.48</InstdAmt>
+					</Amt>
+					<ReqdColltnDt>2022-01-14</ReqdColltnDt>
+					<MndtRltdInf>
+						<MndtId>AMCNGTGTXXX</MndtId>
+					</MndtRltdInf>
+					<Dbtr>
+						<Nm>FADECASA, S.A.</Nm>
+						<PstlAdr>
+							<StrtNm>5A. AVE. SUR No. 30 Guatemala</StrtNm>
+							<BldgNb></BldgNb>
+							<PstCd></PstCd>
+							<TwnNm></TwnNm>
+							<Ctry>GT</Ctry>
+						</PstlAdr>
+					</Dbtr>
+					<Cdtr>
+						<Nm>FADECASA, S.A.</Nm>
+						<PstlAdr>
+							<StrtNm></StrtNm>
+							<BldgNb></BldgNb>
+							<PstCd></PstCd>
+							<TwnNm></TwnNm>
+							<Ctry>GT</Ctry>
+						</PstlAdr>
+					</Cdtr>
+				</OrgnlTxRef>
+			</TxInfAndSts>
+		</OrgnlPmtInfAndSts>
+	</CstmrPmtStsRpt>
+</Document>

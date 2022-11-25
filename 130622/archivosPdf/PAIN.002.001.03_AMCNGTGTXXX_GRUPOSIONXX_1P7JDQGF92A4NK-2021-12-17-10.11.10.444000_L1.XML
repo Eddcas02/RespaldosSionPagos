@@ -1,0 +1,38 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<Document xmlns="urn:iso:std:iso:20022:tech:xsd:pain.002.001.03" xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance">
+	<CstmrPmtStsRpt>
+		<GrpHdr>
+			<MsgId>1P7JDQGF92A4NK</MsgId>
+			<CreDtTm>2021-12-17T10:11:10</CreDtTm>
+			<InitgPty>
+				<Nm>Grupo Sion</Nm>
+				<PstlAdr>
+					<StrtNm></StrtNm>
+					<TwnNm></TwnNm>
+					<Ctry>GT</Ctry>
+				</PstlAdr>
+			</InitgPty>
+			<Id>
+				<OrgId>
+					<BICOrBEI>GRUPOSIONXX</BICOrBEI>
+				</OrgId>
+			</Id>
+			<DbtrAgt>
+				<FinInstnId>
+					<BICFI>AMCNGTGTXXX</BICFI>
+				</FinInstnId>
+			</DbtrAgt>
+		</GrpHdr>
+		<OrgnlGrpInfAndSts>
+			<OrgnlMsgId>1P7JDQGF92A4NK</OrgnlMsgId>
+			<OrgnlMsgNmId>PAIN.001.001.03</OrgnlMsgNmId>
+			<OrgnlCreDtTm>2021-12-17T10:10:53</OrgnlCreDtTm>
+			<OrgnlNbOfTxs>1</OrgnlNbOfTxs>
+			<OrgnlCtrlSum>1.00</OrgnlCtrlSum>
+			<GrpSts>RJCT</GrpSts>
+			<StsRsnInf>
+			  <AddtlInf> L1-Numero de envio duplicado </AddtlInf>
+			</StsRsnInf>
+		</OrgnlGrpInfAndSts>
+	</CstmrPmtStsRpt>
+</Document>
