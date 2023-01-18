@@ -1483,7 +1483,9 @@ class CargaDatosController extends Controller
                 $existeFlujo = Flujos::where('doc_num',$item->Documento)
                 ->where('empresa_codigo',$item->Empresa)
                 ->where('activo','=',1)
-                ->where('eliminado','=',0)->first();
+                ->where('eliminado','=',0)
+                //->whereIn('estado', [1,2,3,4,10,11])
+                ->first();
                 if($existeFlujo)
                 {
                     $existeFlujo->estado = 8;

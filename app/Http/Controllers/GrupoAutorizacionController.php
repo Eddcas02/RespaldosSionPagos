@@ -18,7 +18,8 @@ class GrupoAutorizacionController extends Controller
             'GrupoAutorizacion.numero_niveles',
             'GrupoAutorizacion.activo',
             'GrupoAutorizacion.eliminado'
-        )->orderBy('GrupoAutorizacion.id_grupoautorizacion')->get();
+        )
+        ->where('eliminado',0)->orderBy('GrupoAutorizacion.id_grupoautorizacion')->get();
         $datos = array();
         $datos['grupos'] = $grupoautorizacion;
         return $datos;

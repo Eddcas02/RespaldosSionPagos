@@ -305,7 +305,7 @@ class ReportesController extends Controller
             Flujo.comments,
             Flujo.doc_total,
             Flujo.doc_curr,
-            Flujo.doc_date,
+            DATE_FORMAT(Flujo.doc_date,'%Y-%m-%dT%H:%i:%s')as doc_date,
             Flujo.tipo,
             DATE_FORMAT(FlujoDetalle.Fecha,'%Y-%m-%dT%H:%i:%s') as fecha,
             FlujoDetalle.Comentario"
@@ -572,7 +572,7 @@ class ReportesController extends Controller
             Flujo.comments,
             Flujo.doc_total,
             Flujo.doc_curr,
-            Flujo.doc_date,
+            DATE_FORMAT(Flujo.doc_date,'%Y-%m-%dT%H:%i:%s')as doc_date,
             Flujo.tipo,
             (select ef.descripcion from EstadoFlujo as ef where ef.id_estadoflujo = Flujo.estado) as nombre_estado,
             (select DATE_FORMAT(MAX(fd.Fecha),'%Y-%m-%dT%H:%i:%s') from FlujoDetalle as fd where fd.IdEstadoFlujo = 7
@@ -602,7 +602,7 @@ class ReportesController extends Controller
             Flujo.comments,
             Flujo.doc_total,
             Flujo.doc_curr,
-            Flujo.doc_date,
+            DATE_FORMAT(Flujo.doc_date,'%Y-%m-%dT%H:%i:%s')as doc_date,
             Flujo.tipo,
             (select ef.descripcion from EstadoFlujo as ef where ef.id_estadoflujo = Flujo.estado) as nombre_estado,
             (select DATE_FORMAT(MAX(fd.Fecha),'%Y-%m-%dT%H:%i:%s') from FlujoDetalle as fd where fd.IdEstadoFlujo = 17
@@ -632,7 +632,7 @@ class ReportesController extends Controller
             Flujo.comments,
             Flujo.doc_total,
             Flujo.doc_curr,
-            Flujo.doc_date,
+            DATE_FORMAT(Flujo.doc_date,'%Y-%m-%dT%H:%i:%s')as doc_date,
             Flujo.tipo,
             (select ef.descripcion from EstadoFlujo as ef where ef.id_estadoflujo = Flujo.estado) as nombre_estado,
             (select DATE_FORMAT(MAX(fd.Fecha),'%Y-%m-%dT%H:%i:%s') from FlujoDetalle as fd where fd.IdEstadoFlujo = 15
@@ -747,7 +747,7 @@ class ReportesController extends Controller
             Flujo.comments,
             Flujo.doc_total,
             Flujo.doc_curr,
-            Flujo.doc_date,
+            DATE_FORMAT(Flujo.doc_date,'%Y-%m-%dT%H:%i:%s')as doc_date,
             Flujo.tipo,
             DATE_FORMAT(FlujoDetalle.Fecha,'%Y-%m-%dT%H:%i:%s') as fecha,
             (select DATE_FORMAT(MAX(fd.Fecha),'%Y-%m-%dT%H:%i:%s') from FlujoDetalle as fd where fd.IdEstadoFlujo = 1
@@ -840,7 +840,7 @@ class ReportesController extends Controller
             Flujo.comments,
             Flujo.doc_total,
             Flujo.doc_curr,
-            Flujo.doc_date,
+            DATE_FORMAT(Flujo.doc_date,'%Y-%m-%dT%H:%i:%s')as doc_date,
             Flujo.tipo,
             DATE_FORMAT(FlujoDetalle.Fecha,'%Y-%m-%dT%H:%i:%s') as fecha,
             (select DATE_FORMAT(MAX(fd.Fecha),'%Y-%m-%dT%H:%i:%s') from FlujoDetalle as fd where fd.IdEstadoFlujo = 1
@@ -851,6 +851,102 @@ class ReportesController extends Controller
         ->where('FlujoDetalle.IdEstadoFlujo', 16)
         ->where('FlujoDetalle.FlujoActivo', 1)
         ->whereBetween('Flujo.doc_date',[$diaInicialConsulta, $diaFinalConsulta])
+        ->whereIn('Flujo.empresa_codigo', $EmpresasRestringidas)
+        ->where(function ($q) use ($listaWhereTextos) {
+            foreach ($listaWhereTextos as $value) {
+                 $q->orWhere('Flujo.comments', 'like', "%{$value}%");
+            }
+        })
+        ->orderBy('Flujo.id_flujo', 'ASC')  
+        ->get();
+        
+        $datos = array();
+        $datos['flujos'] = $pagos;
+        return $datos;        
+    }
+
+    public function pendientecompensarreporte(Request $request, $id)
+    {
+        if($request->fechaInicial == "" && $request->fechaFinal == "")
+        {
+            $fechaActualTmp = Carbon::now('America/Guatemala');
+            $yearConsulta = $fechaActualTmp->year;
+            $mesConsulta =  $fechaActualTmp->month;
+            if($request->year > 0){
+                $yearConsulta = $request->year;
+            }
+            if($request->mes > 0){
+                $mesConsulta = $request->mes;
+            }
+            $diaInicialConsulta = Carbon::create($yearConsulta, $mesConsulta)->startOfMonth()->format('Y-m-d');
+            $diaFinalConsulta = Carbon::create($yearConsulta, $mesConsulta)->lastOfMonth()->format('Y-m-d');    
+        }else{
+            $diaInicialConsulta = Carbon::create($request->fechaInicial)->format('Y-m-d');
+            $diaFinalConsulta = Carbon::create($request->fechaFinal)->format('Y-m-d');    
+        }
+
+        $campoFiltro = "Flujo.doc_date";
+        if($request->campo == "Fecha"){
+            $campoFiltro = "FlujoDetalle.Fecha";
+        }
+
+        $EmpresasRestringidasLista = RestriccionEmpresa::select(['empresa_codigo'])->where('eliminado',0)
+        ->where('activo',1)->get()->toArray();
+
+        $EmpresasDeUsuario = UsuarioRestriccionEmpresa::select(['empresa_codigo'])
+        ->where('id_usuario',$id)
+        ->where('eliminado',0)
+        ->where('activo',1)
+        ->get()->toArray();
+
+        if(!empty($EmpresasDeUsuario)){
+            $EmpresasRestringidas = Flujos::select(['empresa_codigo'])
+            ->whereIn('empresa_codigo', $EmpresasDeUsuario)
+            ->groupBy('empresa_codigo')
+            ->groupBy('empresa_nombre')
+            ->get()->toArray();
+        }else{
+            $EmpresasRestringidas = Flujos::select(['empresa_codigo'])
+            ->whereNotIn('empresa_codigo', $EmpresasRestringidasLista)
+            ->groupBy('empresa_codigo')
+            ->groupBy('empresa_nombre')
+            ->get()->toArray();
+        }
+
+        $listaWhereTextosTmp = UsuarioRestriccionTexto::select(['texto'])
+        ->where('id_usuario',$id)
+        ->where('eliminado',0)
+        ->where('activo',1)
+        ->get()->toArray();
+
+        $listaWhereTextos = array();
+
+        if(count($listaWhereTextosTmp) > 0){
+            foreach($listaWhereTextosTmp as $item){
+                $listaWhereTextos[] = $item['texto'];
+            }
+        }
+
+        $pagos = Flujos::join('FlujoDetalle', function($join){
+            $join->on('FlujoDetalle.IdFlujo', '=', 'Flujo.id_flujo');
+        })
+        ->selectRaw(
+            "Flujo.empresa_nombre,
+            Flujo.doc_num,
+            Flujo.tipo,
+            Flujo.dfl_account,
+            Flujo.en_favor_de,
+            Flujo.comments,
+            Flujo.doc_total,
+            Flujo.doc_curr,
+            DATE_FORMAT(Flujo.doc_date,'%Y-%m-%dT%H:%i:%s') as doc_date,
+            DATE_FORMAT(FlujoDetalle.Fecha,'%Y-%m-%dT%H:%i:%s') as fecha"
+        )
+        ->where('FlujoDetalle.IdEstadoFlujo', 5)
+        ->where('FlujoDetalle.FlujoActivo', 1)
+        ->where('Flujo.activo', '=',1)
+        ->where('Flujo.eliminado', '=',0)
+        ->whereBetween($campoFiltro,[$diaInicialConsulta, $diaFinalConsulta])
         ->whereIn('Flujo.empresa_codigo', $EmpresasRestringidas)
         ->where(function ($q) use ($listaWhereTextos) {
             foreach ($listaWhereTextos as $value) {
@@ -929,7 +1025,7 @@ class ReportesController extends Controller
         $ListaFlujosGrupo = Flujos::selectRaw(
             "Flujo.id_flujo,
             Flujo.id_grupoautorizacion,
-            Flujo.doc_date,
+            DATE_FORMAT(Flujo.doc_date,'%Y-%m-%dT%H:%i:%s')as doc_date,
             Flujo.nivel,
             Flujo.dias_credito,
             Flujo.estado,
@@ -1074,7 +1170,7 @@ class ReportesController extends Controller
         $ListaFlujosGrupo = Flujos::selectRaw(
             "Flujo.id_flujo,
             Flujo.id_grupoautorizacion,
-            Flujo.doc_date,
+            DATE_FORMAT(Flujo.doc_date,'%Y-%m-%dT%H:%i:%s')as doc_date,
             Flujo.nivel,
             Flujo.dias_credito,
             Flujo.estado,

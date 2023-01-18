@@ -96,7 +96,8 @@ class CargarDatosITSCancelados extends Command
                 ->where('empresa_codigo',$item->Empresa)
                 ->where('activo','=',1)
                 ->where('eliminado','=',0)
-                ->whereIn('estado', [1,2,3,4,10,11])->first();
+                //->whereIn('estado', [1,2,3,4,10,11])
+                ->first();
                 if($existeFlujo)
                 {
                     $existeFlujo->estado = 8;

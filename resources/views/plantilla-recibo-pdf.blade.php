@@ -89,6 +89,9 @@
             Crédito de: {{$dataArchivo['monto']}}
             <br />
             <br />
+            Fecha de aplicación: {{$dataArchivo['fecha_respuesta']}}
+            <br />
+            <br />
             <br />
             <br />
             <div class="container-footer">Consulte su estado de cuenta.</div>

@@ -337,6 +337,9 @@ Route::middleware('auth:api')->group(function (){
     //Reporte reemplazos
     Route::post('reemplazosreporte/{id}', [ReportesController::class, 'reemplazosreporte']);
 
+    //Reporte Pendientes de compensar
+    Route::post('pendientecompensarreporte/{id}', [ReportesController::class, 'pendientecompensarreporte']);
+    
     //Grafico semáforo individual
     Route::post('semaforoindividual', [ReportesController::class, 'graficoSemaforoIndividual']);
     //Grafico semáforo individual

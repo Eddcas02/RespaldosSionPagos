@@ -79,8 +79,14 @@ class FlujosController extends Controller
                         $subnode = $xmlDoc->addChild($key);
                         FlujosController::generarXML(null, $value, $subnode);
                     }else{
-                        $subnode = $xmlDoc->addChild("PmtInf");
-                        FlujosController::generarXML(null, $value, $subnode);
+                        $firstKey = array_key_first($value);
+                        if($firstKey == "CdtTrfTxInf"){
+                            $subnode = $xmlDoc->addChild("CdtTrfTxInf");
+                            FlujosController::generarXML(null, $value["CdtTrfTxInf"], $subnode);
+                        }else{
+                            $subnode = $xmlDoc->addChild("PmtInf");
+                            FlujosController::generarXML(null, $value, $subnode);
+                        }
                     }
                 }else {
                     $child = $xmlDoc->addChild($tag,htmlspecialchars($value));
@@ -94,7 +100,7 @@ class FlujosController extends Controller
         }
     }
 
-    function calcularTotal($array) { 
+    /* function calcularTotal($array) { 
         $total = 0;          
         foreach($array as $item){
             if(is_array($item)){
@@ -102,7 +108,7 @@ class FlujosController extends Controller
             }
         }               
         return $total;
-    }
+    } */
 
     function generarCodigo($length) { 
         $codigo = "";
@@ -1739,7 +1745,7 @@ class FlujosController extends Controller
         }
     }
 
-    public function update(Request $request, $id)
+    public function updateOriginal(Request $request, $id)
     {
         if($request->opcion == '1'){
             $flujos = Flujos::find($id);
@@ -2146,6 +2152,442 @@ class FlujosController extends Controller
                 return response()->json("No se encontraron pagos para compensar, es posible que otro usuario ya realizó esta acción."); 
             }
         }
+    }
+
+    //Es igual a updateOriginal pero tiene el cambio para enviar todos los pagos en el mismo xml
+    public function update(Request $request, $id)
+    {
+        if($request->opcion == '1'){
+            $flujos = Flujos::find($id);
+            $flujos->estado = 6;
+            $flujos->nivel = 0;
+            $flujos->ConDuda = 0;
+            $flujos->save();
+            
+            return response()->json("OK"); 
+        }else if($request->opcion == '2'){
+            $arrayPagos = array();
+            $arrayPagosCompensados = array();
+            $i = 0;
+            foreach($request->pagos as $pago){
+                $datosFlujo = Flujos::where('id_flujo',$pago)->first();
+                if($datosFlujo->tipo == "BANCARIO" || $datosFlujo->tipo == "INTERNA"){
+                    $arrayPagos[$i] = $pago;
+                    $i++;
+                }else{
+                    $flujos = Flujos::join('Banco', function($join){
+                        $join->on('Flujo.bank_code', 'Banco.codigo_SAP');
+                    })
+                    ->where('Flujo.id_flujo', $pago)
+                    ->where('Banco.eliminado', 0)
+                    ->where('Banco.activo', 1)->get();
+                    if($flujos->count() > 0){
+                        $arrayPagos[$i] = $pago;
+                        $i++;
+                    }
+                }
+            }
+            $flujos = Flujos::selectRaw(
+				"Flujo.id_flujo as IdFlujo,
+                 Flujo.id_tipoflujo as IdTipoFlujo,
+				 Flujo.doc_num as DocNum,
+				 Flujo.tipo as Tipo,
+				 DATE_FORMAT(Flujo.tax_date,'%Y-%m-%d') as TaxDate,
+				 DATE_FORMAT(Flujo.doc_date,'%Y-%m-%d') as DocDate,
+				 Flujo.card_code as CardCode,
+				 Flujo.card_name as CardName,
+				 Flujo.comments as Comments,
+				 Flujo.doc_total as DocTotal,
+				 Flujo.doc_curr as DocCurr,
+				 Flujo.bank_code as BankCode,
+				 Flujo.dfl_account as DflAccount,
+				 Flujo.tipo_cuenta_destino as TipoCuentaDestino,
+				 Flujo.cuenta_orgien as CuentaOrigen,
+				 Flujo.empresa_codigo as EmpresaCodigo,
+				 Flujo.empresa_nombre as EmpresaNombre,
+				 Flujo.cheque as Cheque,
+				 Flujo.en_favor_de as EnFavorDe,
+				 Flujo.email as Email,
+                 Flujo.dias_credito as DiasCredito,
+                 Flujo.nombre_condicion_pago_dias as NombreCondicionPagoDias,
+                 Flujo.NombreXML,
+                 (select DATE_FORMAT(MAX(fd.Fecha),'%Y-%m-%d') from FlujoDetalle as fd where fd.IdEstadoFlujo = 5
+                and fd.IdFlujo = Flujo.id_flujo) as aut_date"
+			)
+            ->whereIn('Flujo.id_flujo', $arrayPagos)
+            ->where('Flujo.estado', '=',5)
+            ->where('Flujo.activo', '=',1)
+            ->where('Flujo.eliminado', '=',0)
+            ->orderBy('Flujo.id_flujo', 'ASC')->get()->toArray(); 
+
+            if(count($flujos)>0){
+                $pagosDetalle = array();
+                if($flujos[0]['Tipo'] == "BANCARIO" || $flujos[0]['Tipo'] == "INTERNA"){
+                    foreach($flujos as $pago){
+                        Flujos::where('id_flujo', $pago['IdFlujo'])
+                        ->update(['estado' => 7, 'nivel' => 0,'ConDuda' => 0]);
+                        $arrayPagosCompensados[] = $pago['IdFlujo'];
+                    }
+                    self::EnvioLotes($flujos, $request->id_usuario);
+                }else{
+                    $ListaCuentaOrigen = array();
+                    foreach($flujos as $pago){
+                        if(!in_array($pago['CuentaOrigen'],$ListaCuentaOrigen)){
+                            $ListaCuentaOrigen[] = $pago['CuentaOrigen'];
+                        }
+                    }
+
+                    foreach($ListaCuentaOrigen as $cuenta){
+
+                        $pagosDeCuenta = array();
+                        $contadorDePagos = 0;
+                        $totalMontoDePagos = 0;
+                        $FechaDoc = date("Y-m-d H:i",strtotime('-6 hour',strtotime(now())));
+                        $Codigo = FlujosController::generarCodigo(13);
+                        $CodigoFecha = date("YmdHis",strtotime('-6 hour',strtotime(now())));
+                        $FileName = 'PAIN.001.001.03_GRUPOSIONXX_AMCNGTGTXXX_DOC'.$CodigoFecha.'.xml';
+    
+                        $pagos = array();
+                        $j = 0;
+    
+                        foreach($flujos as $pago){
+                            if($pago['CuentaOrigen'] == $cuenta){
+                                $validamosPago = Flujos::where('id_flujo', $pago['IdFlujo'])
+                                ->where('estado', '=',5)
+                                ->first();
+        
+                                if($validamosPago){
+    
+                                    $pagosDeCuenta[] = $pago;
+                                    $arrayPagosCompensados[] = $pago['IdFlujo'];
+
+                                    Flujos::where('id_flujo', $pago['IdFlujo'])
+                                    ->update(['estado' => 19]);
+        
+                                    $contadorDePagos++;
+                                    //Cambio previo a Producción
+                                    $totalMontoDePagos = $totalMontoDePagos + $pago['DocTotal'];
+                                    $MontoPago = $pago['DocTotal'];
+                                    //$totalMontoDePagos = $totalMontoDePagos + 1;
+                                    //$MontoPago = 1;
+                                    //Inicio de detalle
+                                    $pagos[$j] = array(
+                                        "PmtId" => array(
+                                            "InstrId" => "", 
+                                            "EndToEndId" => $pago['DocNum'],
+                                        ), 
+                                        "Amt" => array(
+                                            "InstdAmt Ccy=".$pago['DocCurr'] => $MontoPago,
+                                        ),
+                                        "ChrgBr" => FlujosController::obtenerTipo($pago['Tipo'], 2),
+                                        "ChqInstr" => array(
+                                            "ChqTp" => "",
+                                            "DlvryMtd" => array(
+                                                "Cd" => "",
+                                            ),
+                                            "InstrPrty" => "",
+                                            "ChqMtrtyDt" => "",
+                                        ),
+                                        "CdtrAgt" => array(
+                                            "FinInstnId" => array(
+                                                "BIC" => FlujosController::obtenerDatos($pago['BankCode'], 3),
+                                                "ClrSysMmbId" => array(
+                                                    "ClrSysId" => array(
+                                                        "Prtry" => "",
+                                                    ),
+                                                    "MmbId" => FlujosController::obtenerDatos($pago['BankCode'], 1),
+                                                ),
+                                                "Nm" => FlujosController::obtenerDatos($pago['BankCode'], 4),
+                                                "PstlAdr" => array(
+                                                    "Ctry" => FlujosController::obtenerDatos($pago['BankCode'], 2),
+                                                ),
+                                            ),
+                                        ),
+                                        "Cdtr" => array(
+                                            "Nm" => $pago['EnFavorDe'],
+                                            "PstlAdr" => array(
+                                                "PstCd" => "",
+                                                "CtrySubDvsn" => "",
+                                                "Ctry" => "",
+                                                "AdrLine" => "",
+                                            ),
+                                            "Id" => array(
+                                                "OrgId" => array(
+                                                    "Othr"  => array(
+                                                        "Id" => FlujosController::obtenerDatos($pago['IdFlujo'], 5),
+                                                        "SchmeNm"  => array(
+                                                            "Cd" => "",
+                                                        ),
+                                                    ),
+                                                ),
+                                            ),
+                                        ),
+                                        "CdtrAcct" => array(
+                                            "Id"  => array(
+                                                "Othr"  => array(
+                                                    "Id" => $pago['DflAccount'],
+                                                ),
+                                            ),
+                                            "Nm" => $pago['EnFavorDe'],
+                                            "Tp" => array(
+                                                "Cd" => FlujosController::esAhorro($pago['TipoCuentaDestino']),
+                                            ),
+                                        ),
+                                        "Tax" => array(
+                                            "Cdtr"  => array(
+                                                "TaxId"  => "",
+                                            ),
+                                            "Dbtr"  => array(
+                                                "TaxId"  => "",
+                                            ),
+                                            "Dt" => "",
+                                        ),
+                                        "RmtInf" => array(
+                                            "Strd"  => array(
+                                                "RfrdDocInf"  => array(
+                                                    "Tp" => array(
+                                                        "CdOrPrtry" => array(
+                                                            "Cd" => "",
+                                                        ),
+                                                    ),
+                                                    "Nb"  => $pago['Comments'],
+                                                    "RltdDt"  => "",
+                                                ),
+                                                "RfrdDocAmt" => array(
+                                                    "DuePyblAmt" => "0",
+                                                    "DscntApldAmt" => "0",
+                                                    "CdtNoteAmt" => "0",
+                                                    "RmtdAmt" => "0",
+                                                ),
+                                                "CdtrRefInf" => array(
+                                                    "Tp" => array(
+                                                        "Issr" => "",
+                                                    ),
+                                                ),
+                                                "AddtlRmtInf"  => "",
+                                            ),
+                                        )           
+                                    );
+                                    $j++;
+                                }else{
+                                    //Buscar pago en array $flujos y quitarlo
+                                    $keyObj = array_search($pago, $flujos);
+                                    unset($flujos[$keyObj]);
+                                }
+                            }
+                        }
+
+                        if(count($pagosDeCuenta)>0){
+                    
+                            $encabezado = array(
+                                "GrpHdr" => array(
+                                    "MsgId" => $Codigo,
+                                    "CreDtTm" => $FechaDoc,
+                                    "NbOfTxs" => $contadorDePagos,
+                                    "CtrlSum" => $totalMontoDePagos,
+                                    "InitgPty" => array(
+                                        "Nm" => "Grupo Sion",
+                                        "Id" => array(
+                                            "OrgId" => array(
+                                                "BICOrBEI" => "BICCLIENTE",
+                                            )
+                                        )
+                                    )
+                                )
+                            );
+        
+                            $encabezadoDetalle = array(
+                                "PmtInfId" => $Codigo,
+                                "PmtMtd" => FlujosController::obtenerTipo($pagosDeCuenta[0]['Tipo'], 1),
+                                "BtchBookg" => "",
+                                "NbOfTxs" => $contadorDePagos,
+                                "CtrlSum" => $totalMontoDePagos,
+                                "PmtTpInf" => array(
+                                    "InstrPrty" => "",
+                                    "CtgyPurp" => array(
+                                        "Cd" => "",
+                                    ), 
+                                    "SvcLvl" => array(
+                                        "Cd" => "",
+                                    ), 
+                                ),
+                                "ReqdExctnDt" => $pagosDeCuenta[0]['DocDate'],
+                                "Dbtr" => array(
+                                    "Nm" => FlujosController::obtenerDatos($pagosDeCuenta[0]['IdFlujo'], 6),
+                                    "PstlAdr" => array(
+                                        "StrtNm" => FlujosController::obtenerDatos($pagosDeCuenta[0]['IdFlujo'], 7),
+                                        "TwnNm" => "",
+                                        "Ctry" => "",
+                                    ),
+                                    "CtryOfRes" => "", 
+                                    "Id" => array(
+                                        "OrgId" => array( 
+                                            "Othr" => array(
+                                                "Id" => "",
+                                                "SchmeNm" => array(
+                                                    "Cd" => "CNA",
+                                                ),
+                                            ),
+                                        ),
+                                    ), 
+                                ),
+                                "DbtrAcct" => array(
+                                    "Id" => array(
+                                        "Othr" => array(
+                                            "Id" => $pagosDeCuenta[0]['CuentaOrigen'],
+                                            "SchmeNm" => array(
+                                                "Prtry" => "",
+                                                "Cd" => "",
+                                            ),
+                                        ),
+                                    ), 
+                                    "Ccy" => $pagosDeCuenta[0]['DocCurr'],                        
+                                ),
+                                "DbtrAgt" => array(
+                                    "FinInstnId" => array(
+                                        "BIC" => FlujosController::obtenerDatos($pagosDeCuenta[0]['BankCode'], 3),
+                                        "PstlAdr" => array(
+                                            "Ctry" => FlujosController::obtenerDatos($pagosDeCuenta[0]['BankCode'], 2),
+                                        ),
+                                    ),
+                                )
+                            );
+        
+                            foreach($pagos as $items){
+                                $encabezadoDetalle[]["CdtTrfTxInf"] = $items;
+                            }
+                            $pagosDetalle[0] = $encabezadoDetalle;
+        
+                            $xmlDoc = new \SimpleXMLElement(
+                                "<?xml version=\"1.0\" encoding=\"UTF-8\"?><Document></Document>"
+                            );
+                            $xmlDoc = $xmlDoc->addChild('CstmrCdtTrfInitn');
+                            FlujosController::generarXML($encabezado, $pagosDetalle, $xmlDoc);
+                            $dom = dom_import_simplexml($xmlDoc)->ownerDocument;
+                            $dom->formatOutput = true;
+                            $xml_file=$dom->save(storage_path('app/'.$FileName));
+                            //Carga archivo xml a banco
+                            if($xml_file){
+                                $pathFinalXml = storage_path('app/'.$FileName);
+                                //Cambio previo a Producción
+                                //$file_sftp = File::copy($pathFinalXml, '/home/test2/out/'.$FileName);
+                                $file_sftp = File::copy($pathFinalXml, '/home/prd/out/'.$FileName);
+                                foreach($pagosDeCuenta as $pago){
+                                    Flujos::where('id_flujo', $pago['IdFlujo'])
+                                    ->update(['ArchivoSubido' => 1, 'NombreXML' => $FileName, 'estado' => 17, 'nivel' => 0,'ConDuda' => 0]);
+                                }
+                            }else{
+                                foreach($pagosDeCuenta as $pago){
+                                    Flujos::where('id_flujo', $pago['IdFlujo'])
+                                    ->update(['estado' => 5]);
+                                    //Buscar pago en array $flujos y quitarlo
+                                    $keyObj = array_search($pago, $flujos);
+                                    unset($flujos[$keyObj]);
+                                }
+                            }
+        
+                            self::EnvioLotes($pagosDeCuenta, $request->id_usuario);
+                        }
+
+                    }
+                }
+                $respuestaFinal = array();
+                $respuestaFinal["mensaje"] = "OK";
+                $respuestaFinal["pagos"] = $arrayPagosCompensados;
+                return response()->json($respuestaFinal); 
+            }else{
+                
+                $respuestaFinal = array();
+                $respuestaFinal["mensaje"] = "No se encontraron pagos para compensar, es posible que otro usuario ya realizó esta acción.";
+                return response()->json($respuestaFinal); 
+            }
+        }
+    }
+
+    function EnvioLotes($flujos, $id_usuario){
+        $LotePago = new LotePago;
+        $LotePago->tipo = $flujos[0]['Tipo'];
+        $LotePago->fecha_hora = date("Y-m-d H:i",strtotime('-6 hour',strtotime(now())));
+        $LotePago->id_usuario = $id_usuario;
+        $LotePago->Activo = 1;
+        $LotePago->Eliminado = 0;
+        $LotePago->save();
+        $contadorSinCheque = 0;
+        $registrosParaInsertar = [];
+        foreach($flujos as $pago){
+            $FlujoLotePago = new FlujoLotePago;
+            $FlujoLotePago->id_lotepago = $LotePago->id_lotepago;
+            $FlujoLotePago->id_flujo = $pago['IdFlujo'];
+            $registrosParaInsertar[] = $FlujoLotePago->attributesToArray();
+        }
+        FlujoLotePago::insert($registrosParaInsertar);
+
+        $nombreArchivoPdf = 'PagosLote'.$LotePago->id_lotepago.'.pdf';
+        $fechaActual = Carbon::now('America/Guatemala');
+        $qrcode = base64_encode(QrCode::format('svg')->size(100)->errorCorrection('H')->generate('https://pagos.sion.com.gt/pagos/#/descargararchivos/'.$LotePago->id_lotepago));
+        $dataArchivo = [
+            'CodigoQR' => $qrcode,
+            'fecha' => $fechaActual->toDateString(), 
+            'hora' => $fechaActual->toTimeString(),
+            'flujos' => $flujos
+        ];
+        //Crear archivo PDF
+        $pdf = PDF::loadView('plantilla-pdf', compact('dataArchivo'))->setPaper('letter');
+        $pathArchivoPdf = base_path('archivosPdf');
+        $pdf->save($pathArchivoPdf.'/'.$nombreArchivoPdf);
+        //Crear archivo Excel
+        $nombreArchivoExcel = 'PagosLote'.$LotePago->id_lotepago.'.xlsx';
+        $pagosExcel = array();
+        foreach($flujos as $pago){
+            $partesFecha = explode("-", $pago['aut_date']);
+            $fechaTmp = "";
+            if(count($partesFecha) > 2){
+                $fechaTmp = $partesFecha[2]."/".$partesFecha[1]."/".$partesFecha[0];
+            }
+            $pagosExcel[] = [
+                'CuentaOrigen' => $pago['CuentaOrigen'],
+                'Cheque' => $pago['Cheque'],
+                'aut_date' => $fechaTmp,
+                'EnFavorDe' => $pago['EnFavorDe'],
+                'DocTotal' => $pago['DocTotal']
+            ];
+        }
+        Excel::store(new ArchivoPrimarioExport($pagosExcel),$nombreArchivoExcel);
+        $pathFinal = storage_path($nombreArchivoExcel);
+        $pathFinal = str_replace('PagosLote'.$LotePago->id_lotepago.'.xlsx','app/PagosLote'.$LotePago->id_lotepago.'.xlsx',$pathFinal);
+        LotePago::where('id_lotepago', $LotePago->id_lotepago)
+        ->update(['PathDocumentoPDF' => $pathArchivoPdf.'/'.$nombreArchivoPdf, 'PathDocumentoExcel' => $pathFinal]);
+        $usuarioNotificacionTransaccion = UsuarioNotificacionTransaccion::where('Activo','=',1)
+        ->where('Eliminado','=',0)->where('TipoTransaccion','=',$flujos[0]['Tipo'])->get();
+
+        foreach($usuarioNotificacionTransaccion as $itemUsuarioNotificacion){
+            $datosUsuario = Usuarios::where('activo',1)->where('eliminado',0)
+            ->where('id_usuario', '=', $itemUsuarioNotificacion->id_usuario)->first();
+            if($datosUsuario){
+                $documentosEnviar = NotificacionTipoDocumentoLote::where('Activo',1)
+                ->where('Eliminado',0)->where('id_usuarionotificaciontransaccion',$itemUsuarioNotificacion->id_usuarionotificaciontransaccion)->get();
+                $contadorDocumentos = 0;
+
+                $details=['id_lotepago' => $LotePago->id_lotepago];
+                foreach($documentosEnviar as $itemDocumentos){
+                    switch ($itemDocumentos->id_tipodocumentolote) {
+                        case 1:
+                            $details+=['archivoPDF' => $pathArchivoPdf.'/'.$nombreArchivoPdf];
+                            break;
+                        case 2:
+                            $details+=['archivoExcel' => $pathFinal];
+                            break;
+                    }
+                    $contadorDocumentos++;
+                }
+
+                if($contadorDocumentos > 0){
+                    Mail::to($datosUsuario->correo)->send(new EnvioArchivos($details));
+                }
+            }
+        }
+        File::copy($pathArchivoPdf.'/'.$nombreArchivoPdf,'/var/www/html/proyectopagos/pagos/archivos/PagosLote'.$LotePago->id_lotepago.'.pdf');
+        File::copy($pathFinal,'/var/www/html/proyectopagos/pagos/archivos/PagosLote'.$LotePago->id_lotepago.'.xlsx');
     }
 
     public function delete(Request $request)

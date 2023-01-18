@@ -21,6 +21,7 @@ class Kernel extends ConsoleKernel
         Commands\CargarDatosITS::class,
         Commands\CargarDatosITSCancelados::class,
         Commands\DesactivarDuplicados::class,
+        Commands\ActualizarNoCheques::class,
     ];
 
     /**
@@ -39,6 +40,7 @@ class Kernel extends ConsoleKernel
         $schedule->command('datos:its')->everyMinute()->runInBackground();
         $schedule->command('datos:duplicados')->everyMinute()->runInBackground();
         $schedule->command('datos:itscancelados')->everyMinute()->runInBackground();
+        $schedule->command('datos:cheques')->everyMinute()->runInBackground();
     }
 
     /**

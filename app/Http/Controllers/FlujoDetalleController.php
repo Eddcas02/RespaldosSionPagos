@@ -324,7 +324,7 @@ class FlujoDetalleController extends Controller
             $id_usuario = $IdUsuario;
         }
 
-        $estados = [4, 5, 7]; 
+        $estados = [4, 5, 7, 9, 10, 12, 13, 15, 16, 17, 18, 19]; 
         $EmpresasRestringidasLista = RestriccionEmpresa::select(['empresa_codigo'])->where('eliminado',0)
         ->where('activo',1)->get()->toArray();
 

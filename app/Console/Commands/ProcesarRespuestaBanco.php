@@ -52,12 +52,6 @@ class ProcesarRespuestaBanco extends Command
         {
             $pathOrigen = storage_path('app/respuestaBanco/pendientes');
             $pathTerminado = storage_path('app/respuestaBanco/procesados/');
-            $correoDestino = "ecasasola@sion.com.gt";
-            $politicas = Politicas::where('identificador','=','_CORREO_RECIBO_PROVEEDOR_SIN_CORREO_')
-            ->where('activo',1)->where('eliminado',0)->first();
-            if($politicas){
-                $correoDestino = $politicas->valor;
-            }
             $files_local = File::allFiles($pathOrigen);
             foreach($files_local as $item){
                 Log::info($item.' '.date('Y-m-d h:i:s'));
@@ -82,101 +76,267 @@ class ProcesarRespuestaBanco extends Command
                     $resultjson = json_encode($resultxml);
                     $json = json_encode($resultxml);
                     $phpArray = json_decode($json, true);
+                    $fechaRespuestaTmp = explode("T",$phpArray['CstmrPmtStsRpt']['GrpHdr']['CreDtTm']);
+                    $fechaRespuesta= $fechaRespuestaTmp[0].' '.$fechaRespuestaTmp[1];
                     if(array_key_exists('OrgnlPmtInfAndSts',$phpArray['CstmrPmtStsRpt'])){
-                        $num_doc = trim($phpArray['CstmrPmtStsRpt']['OrgnlPmtInfAndSts']['TxInfAndSts']['OrgnlEndToEndId']).'';
-                        $existeFlujo = Flujos::where('doc_num',$num_doc)
-                        ->where('activo','=',1)
-                        ->where('eliminado','=',0)->first();
-                        Log::info($existeFlujo);
-                        if($existeFlujo != null){
-                            $respuesta = trim($phpArray['CstmrPmtStsRpt']['OrgnlPmtInfAndSts']['TxInfAndSts']['StsId']);
-                            $comentario = trim($phpArray['CstmrPmtStsRpt']['OrgnlPmtInfAndSts']['TxInfAndSts']['StsRsnInf']['AddtlInf']);
-                            if($respuesta == 'RJCT'){
-                                $flujoDetalle = new FlujoDetalle;
-                                $flujoDetalle->IdFlujo = $existeFlujo->id_flujo;
-                                $flujoDetalle->IdEstadoFlujo = 9;
-                                $flujoDetalle->IdUsuario = 11;
-                                $flujoDetalle->Fecha = date("Y-m-d H:i",strtotime('-6 hour',strtotime(now())));
-                                $flujoDetalle->Comentario = $comentario;
-                                $flujoDetalle->NivelAutorizo = 0;
-                                $flujoDetalle->save();
-                                Flujos::where('id_flujo', $existeFlujo->id_flujo)
-                                ->update([
-                                    'estado' => 9,
-                                    'nivel' => 0
-                                ]);
-                                File::move($item,$pathDestino);
-                            }
-                            if($respuesta == 'ACSP'){
-                                $flujoDetalle = new FlujoDetalle;
-                                $flujoDetalle->IdFlujo = $existeFlujo->id_flujo;
-                                $flujoDetalle->IdEstadoFlujo = 15;
-                                $flujoDetalle->IdUsuario = 11;
-                                $flujoDetalle->Fecha = date("Y-m-d H:i",strtotime('-6 hour',strtotime(now())));
-                                $flujoDetalle->Comentario = $comentario;
-                                $flujoDetalle->NivelAutorizo = 0;
-                                $flujoDetalle->save();
-                                Flujos::where('id_flujo', $existeFlujo->id_flujo)
-                                ->update([
-                                    'estado' => 15,
-                                    'nivel' => 0
-                                ]);
-                                File::move($item,$pathDestino);
-                                
-                                $nombreArchivoPdf = 'ReciboPago'.$existeFlujo->id_flujo.'.pdf';
-    
-                                //Consulta a WS por correo de proveedor
-                                $client = new \nusoap_client('http://10.20.30.144/GSION_WS/WSGetFromSAP.asmx?wsdl',true);
-                                $param = array('sCardCode'=>$existeFlujo->card_code);
-                                $resultado = $client->call('Get_PROVEEDOR_XML',$param);
-                                if($client->fault)
-                                {
-                                    $error = $client->getError();;
-                                    if($error)
+                        $contadorRespuestas = 0;
+                        foreach($phpArray['CstmrPmtStsRpt']['OrgnlPmtInfAndSts'] as $detalleKey => $detalleValue){
+                            if($detalleKey == "TxInfAndSts"){
+                                if(array_key_exists('OrgnlEndToEndId',$detalleValue)){
+                                    $correoDestino = "ecasasola@sion.com.gt";
+                                    $politicas = Politicas::where('identificador','=','_CORREO_RECIBO_PROVEEDOR_SIN_CORREO_')
+                                    ->where('activo',1)->where('eliminado',0)->first();
+                                    if($politicas){
+                                        $correoDestino = $politicas->valor;
+                                    }
+                                    $contadorRespuestas++;
+                                    $num_doc = trim($detalleValue['OrgnlEndToEndId']).'';
+                                    Log::info($num_doc.' '.date('Y-m-d h:i:s'));
+                                    $existeFlujo = Flujos::where('doc_num',$num_doc)
+                                    ->where('activo','=',1)
+                                    ->where('eliminado','=',0)->first();
+                                    if($existeFlujo != null){
+                                        if($existeFlujo->estado == 17){
+                                            $respuesta = trim($detalleValue['StsId']);
+                                            $comentario = trim($detalleValue['StsRsnInf']['AddtlInf']);
+                                            if($respuesta == 'RJCT'){
+                                                $flujoDetalle = new FlujoDetalle;
+                                                $flujoDetalle->IdFlujo = $existeFlujo->id_flujo;
+                                                $flujoDetalle->IdEstadoFlujo = 9;
+                                                $flujoDetalle->IdUsuario = 11;
+                                                $flujoDetalle->Fecha = date("Y-m-d H:i",strtotime('-6 hour',strtotime(now())));
+                                                $flujoDetalle->Comentario = $comentario;
+                                                $flujoDetalle->NivelAutorizo = 0;
+                                                $flujoDetalle->save();
+                                                Flujos::where('id_flujo', $existeFlujo->id_flujo)
+                                                ->update([
+                                                    'estado' => 9,
+                                                    'nivel' => 0
+                                                ]);
+                                            }
+                                            if($respuesta == 'ACSP'){
+                                                $flujoDetalle = new FlujoDetalle;
+                                                $flujoDetalle->IdFlujo = $existeFlujo->id_flujo;
+                                                $flujoDetalle->IdEstadoFlujo = 15;
+                                                $flujoDetalle->IdUsuario = 11;
+                                                $flujoDetalle->Fecha = date("Y-m-d H:i",strtotime('-6 hour',strtotime(now())));
+                                                $flujoDetalle->Comentario = $comentario;
+                                                $flujoDetalle->NivelAutorizo = 0;
+                                                $flujoDetalle->save();
+                                                Flujos::where('id_flujo', $existeFlujo->id_flujo)
+                                                ->update([
+                                                    'estado' => 15,
+                                                    'nivel' => 0
+                                                ]);
+                                                
+                                                $nombreArchivoPdf = 'ReciboPago'.$existeFlujo->id_flujo.'.pdf';
+                    
+                                                //Consulta a WS por correo de proveedor
+                                                $client = new \nusoap_client('http://10.20.30.144/GSION_WS/WSGetFromSAP.asmx?wsdl',true);
+                                                $param = array('sCardCode'=>$existeFlujo->card_code);
+                                                $resultado = $client->call('Get_PROVEEDOR_XML',$param);
+                                                if($client->fault)
+                                                {
+                                                    $error = $client->getError();;
+                                                    if($error)
+                                                    {
+                                                        echo 'Error:' . $client->faultstring;
+                                                    }
+                                                    die();
+                                                }
+                                                $lineas = $resultado['Get_PROVEEDOR_XMLResult']['BOM']['BO']['OCRD']['row'];
+                                                if(count($lineas) == count($lineas, COUNT_RECURSIVE))
+                                                {
+                                                    if($lineas['E_Mail'] != ""){
+                                                        $correoDestino = $lineas['E_Mail'];
+                                                    }
+                                                }
+                                                $moneda = "Q ";
+                                                if($existeFlujo->doc_curr != 'QTZ'){
+                                                    $moneda = "$ ";
+                                                }
+                    
+                                                //datos para pdf
+                                                $dataArchivo = [
+                                                    'banco_origen' => "Banco de América Central, S.A",
+                                                    'generado_por' => $existeFlujo->empresa_nombre, 
+                                                    'banco_destino' => $existeFlujo->bank_code,
+                                                    'cuenta_destino' => $existeFlujo->dfl_account,
+                                                    'nombre_destino' => $existeFlujo->en_favor_de, 
+                                                    'descripcion_pago' => $existeFlujo->comments,
+                                                    'monto' => $moneda.$existeFlujo->doc_total,
+                                                    'fecha_respuesta' => $fechaRespuesta,
+                                                ];
+                    
+                                                //Crear archivo PDF
+                                                $pdf = PDF::loadView('plantilla-recibo-pdf', compact('dataArchivo'))->setPaper('letter');
+                                                $pathArchivoPdf = base_path('archivosPdf');
+                                                $pdf->save($pathArchivoPdf.'/'.$nombreArchivoPdf);
+                                                $details=['id_flujo' => $existeFlujo->id_flujo];
+                                                $details+=['archivoPDF' => $pathArchivoPdf.'/'.$nombreArchivoPdf];
+                                                
+                                                //Cambio previo a Producción
+                                                /* try{
+                                                    Mail::to('crcf85@gmail.com')->send(new EnviarRecibo($details));
+                                                    Mail::to('ecasasola@sion.com.gt')->send(new EnviarRecibo($details));
+                                                }catch(\Exception $e){
+                                                    Log::info('Error en envío de correo pago '.$num_doc.'. '.date('Y-m-d h:i:s'));
+                                                } */
+
+
+                                                try{
+                                                    Mail::to($correoDestino)->send(new EnviarRecibo($details));
+                                                }catch(\Exception $e){
+                                                    Log::info('Error en envío de correo pago '.$num_doc.'. '.date('Y-m-d h:i:s'));
+                                                }
+                    
+                                                $CorreosNotificacionRecibos = Politicas::where('identificador','=','_CORREO_RECIBO_TRANSFER_')
+                                                ->where('activo',1)->where('eliminado',0)->get();
+                    
+                                                foreach($CorreosNotificacionRecibos as $itemCorreo){
+                                                    try{
+                                                        Mail::to($itemCorreo->valor)->send(new EnviarReciboNotificacion($details));
+                                                    }catch(\Exception $e){
+                                                        Log::info('Error en envío de correo pago '.$num_doc.'. '.date('Y-m-d h:i:s'));
+                                                    }
+                                                }
+                                            }
+                                        }
+                                    }
+                                }else{
+                                    foreach($detalleValue as $itemDetalle)
                                     {
-                                        echo 'Error:' . $client->faultstring;
+                                        if(array_key_exists('OrgnlEndToEndId',$itemDetalle)){
+                                            $correoDestino = "ecasasola@sion.com.gt";
+                                            $politicas = Politicas::where('identificador','=','_CORREO_RECIBO_PROVEEDOR_SIN_CORREO_')
+                                            ->where('activo',1)->where('eliminado',0)->first();
+                                            if($politicas){
+                                                $correoDestino = $politicas->valor;
+                                            }
+                                            $contadorRespuestas++;
+                                            $num_doc = trim($itemDetalle['OrgnlEndToEndId']).'';
+                                            Log::info($num_doc.' '.date('Y-m-d h:i:s'));
+                                            $existeFlujo = Flujos::where('doc_num',$num_doc)
+                                            ->where('activo','=',1)
+                                            ->where('eliminado','=',0)->first();
+                                            if($existeFlujo != null){
+                                                if($existeFlujo->estado == 17){
+                                                    $respuesta = trim($itemDetalle['StsId']);
+                                                    $comentario = trim($itemDetalle['StsRsnInf']['AddtlInf']);
+                                                    if($respuesta == 'RJCT'){
+                                                        $flujoDetalle = new FlujoDetalle;
+                                                        $flujoDetalle->IdFlujo = $existeFlujo->id_flujo;
+                                                        $flujoDetalle->IdEstadoFlujo = 9;
+                                                        $flujoDetalle->IdUsuario = 11;
+                                                        $flujoDetalle->Fecha = date("Y-m-d H:i",strtotime('-6 hour',strtotime(now())));
+                                                        $flujoDetalle->Comentario = $comentario;
+                                                        $flujoDetalle->NivelAutorizo = 0;
+                                                        $flujoDetalle->save();
+                                                        Flujos::where('id_flujo', $existeFlujo->id_flujo)
+                                                        ->update([
+                                                            'estado' => 9,
+                                                            'nivel' => 0
+                                                        ]);
+                                                    }
+                                                    if($respuesta == 'ACSP'){
+                                                        $flujoDetalle = new FlujoDetalle;
+                                                        $flujoDetalle->IdFlujo = $existeFlujo->id_flujo;
+                                                        $flujoDetalle->IdEstadoFlujo = 15;
+                                                        $flujoDetalle->IdUsuario = 11;
+                                                        $flujoDetalle->Fecha = date("Y-m-d H:i",strtotime('-6 hour',strtotime(now())));
+                                                        $flujoDetalle->Comentario = $comentario;
+                                                        $flujoDetalle->NivelAutorizo = 0;
+                                                        $flujoDetalle->save();
+                                                        Flujos::where('id_flujo', $existeFlujo->id_flujo)
+                                                        ->update([
+                                                            'estado' => 15,
+                                                            'nivel' => 0
+                                                        ]);
+                                                        
+                                                        $nombreArchivoPdf = 'ReciboPago'.$existeFlujo->id_flujo.'.pdf';
+                            
+                                                        //Consulta a WS por correo de proveedor
+                                                        $client = new \nusoap_client('http://10.20.30.144/GSION_WS/WSGetFromSAP.asmx?wsdl',true);
+                                                        $param = array('sCardCode'=>$existeFlujo->card_code);
+                                                        $resultado = $client->call('Get_PROVEEDOR_XML',$param);
+                                                        if($client->fault)
+                                                        {
+                                                            $error = $client->getError();;
+                                                            if($error)
+                                                            {
+                                                                echo 'Error:' . $client->faultstring;
+                                                            }
+                                                            die();
+                                                        }
+                                                        $lineas = $resultado['Get_PROVEEDOR_XMLResult']['BOM']['BO']['OCRD']['row'];
+                                                        if(count($lineas) == count($lineas, COUNT_RECURSIVE))
+                                                        {
+                                                            if($lineas['E_Mail'] != ""){
+                                                                $correoDestino = $lineas['E_Mail'];
+                                                            }
+                                                        }
+                                                        $moneda = "Q ";
+                                                        if($existeFlujo->doc_curr != 'QTZ'){
+                                                            $moneda = "$ ";
+                                                        }
+                            
+                                                        //datos para pdf
+                                                        $dataArchivo = [
+                                                            'banco_origen' => "Banco de América Central, S.A",
+                                                            'generado_por' => $existeFlujo->empresa_nombre, 
+                                                            'banco_destino' => $existeFlujo->bank_code,
+                                                            'cuenta_destino' => $existeFlujo->dfl_account,
+                                                            'nombre_destino' => $existeFlujo->en_favor_de, 
+                                                            'descripcion_pago' => $existeFlujo->comments,
+                                                            'monto' => $moneda.$existeFlujo->doc_total,
+                                                            'fecha_respuesta' => $fechaRespuesta,
+                                                        ];
+                            
+                                                        //Crear archivo PDF
+                                                        $pdf = PDF::loadView('plantilla-recibo-pdf', compact('dataArchivo'))->setPaper('letter');
+                                                        $pathArchivoPdf = base_path('archivosPdf');
+                                                        $pdf->save($pathArchivoPdf.'/'.$nombreArchivoPdf);
+                                                        $details=['id_flujo' => $existeFlujo->id_flujo];
+                                                        $details+=['archivoPDF' => $pathArchivoPdf.'/'.$nombreArchivoPdf];
+                                                        
+                                                        //Cambio previo a Producción
+                                                        /* try{
+                                                            Mail::to('crcf85@gmail.com')->send(new EnviarRecibo($details));
+                                                            Mail::to('ecasasola@sion.com.gt')->send(new EnviarRecibo($details));
+                                                        }catch(\Exception $e){
+                                                            Log::info('Error en envío de correo pago '.$num_doc.'. '.date('Y-m-d h:i:s'));
+                                                        } */
+                                                        
+                                                        try{
+                                                            Mail::to($correoDestino)->send(new EnviarRecibo($details));
+                                                        }catch(\Exception $e){
+                                                            Log::info('Error en envío de correo pago '.$num_doc.'. '.date('Y-m-d h:i:s'));
+                                                        }
+                            
+                                                        $CorreosNotificacionRecibos = Politicas::where('identificador','=','_CORREO_RECIBO_TRANSFER_')
+                                                        ->where('activo',1)->where('eliminado',0)->get();
+                            
+                                                        foreach($CorreosNotificacionRecibos as $itemCorreo){
+                                                            try{
+                                                                Mail::to($itemCorreo->valor)->send(new EnviarReciboNotificacion($details));
+                                                            }catch(\Exception $e){
+                                                                Log::info('Error en envío de correo pago '.$num_doc.'. '.date('Y-m-d h:i:s'));
+                                                            }
+                                                        }
+                                                    }
+                                                }
+                                            }
+                                        }
                                     }
-                                    die();
-                                }
-                                $lineas = $resultado['Get_PROVEEDOR_XMLResult']['BOM']['BO']['OCRD']['row'];
-                                if(count($lineas) == count($lineas, COUNT_RECURSIVE))
-                                {
-                                    if($lineas['E_Mail'] != ""){
-                                        $correoDestino = $lineas['E_Mail'];
-                                    }
-                                }
-                                $moneda = "Q ";
-                                if($existeFlujo->doc_curr != 'QTZ'){
-                                    $moneda = "$ ";
-                                }
-    
-                                //datos para pdf
-                                $dataArchivo = [
-                                    'banco_origen' => "Banco de América Central, S.A",
-                                    'generado_por' => $existeFlujo->empresa_nombre, 
-                                    'banco_destino' => $existeFlujo->bank_code,
-                                    'cuenta_destino' => $existeFlujo->dfl_account,
-                                    'nombre_destino' => $existeFlujo->en_favor_de, 
-                                    'descripcion_pago' => $existeFlujo->comments,
-                                    'monto' => $moneda.$existeFlujo->doc_total
-                                ];
-    
-                                //Crear archivo PDF
-                                $pdf = PDF::loadView('plantilla-recibo-pdf', compact('dataArchivo'))->setPaper('letter');
-                                $pathArchivoPdf = base_path('archivosPdf');
-                                $pdf->save($pathArchivoPdf.'/'.$nombreArchivoPdf);
-                                $details=['id_flujo' => $existeFlujo->id_flujo];
-                                $details+=['archivoPDF' => $pathArchivoPdf.'/'.$nombreArchivoPdf];
-                                Mail::to($correoDestino)->send(new EnviarRecibo($details));
-    
-                                $CorreosNotificacionRecibos = Politicas::where('identificador','=','_CORREO_RECIBO_TRANSFER_')
-                                ->where('activo',1)->where('eliminado',0)->get();
-    
-                                foreach($CorreosNotificacionRecibos as $itemCorreo){
-                                   Mail::to($itemCorreo->valor)->send(new EnviarReciboNotificacion($details));
                                 }
                             }
                         }
+                        if($contadorRespuestas == 0){
+                            File::move($item,$pathDestinoError);
+                        }else{
+                            File::move($item,$pathDestino);
+                        }
+                        
                     }else{
                         File::move($item,$pathDestinoError);
                     }
